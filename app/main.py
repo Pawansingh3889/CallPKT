@@ -1,15 +1,26 @@
-"""The webhook server. Two Twilio-facing endpoints:
+"""The webhook server. Two call paths, both driving the same conversation
+manager (app/conversation.py):
 
-  POST /voice    first ring: greeting + open the mic / menu
-  POST /gather   every subsequent turn: digit or speech in, TwiML out
+  GET  /             the browser voice demo (default path — free, no
+                      telephony provider, no phone number; see web/index.html)
+  POST /chat          one turn of the browser call: {session_id, text} in,
+                      {reply, hangup} out
 
-Point a Twilio number's "A call comes in" webhook at /voice on this server's
-public URL (ngrok or Railway; see README) once you have a trial account.
+  POST /voice          Twilio path, optional: first ring, greeting + menu
+  POST /gather          Twilio path, optional: every subsequent turn
+
+Twilio's trial account gates real phone numbers behind a paid plan in some
+regions (hit that live 15 Sep 2026), so /voice and /gather are kept as an
+optional stretch path rather than the default — wire them up if you later
+have a working Twilio number.
 """
+
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
 
 from app import conversation, ivr, twiml
 from app.security import verify_twilio_request
@@ -17,6 +28,24 @@ from app.security import verify_twilio_request
 load_dotenv()
 
 app = FastAPI(title="CallPKT")
+
+_WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+
+
+class ChatTurn(BaseModel):
+    session_id: str
+    text: str
+
+
+@app.get("/")
+async def index() -> FileResponse:
+    return FileResponse(_WEB_DIR / "index.html")
+
+
+@app.post("/chat")
+async def chat(turn: ChatTurn) -> dict:
+    reply_text, should_hangup = conversation.handle_turn(turn.session_id, turn.text)
+    return {"reply": reply_text, "hangup": should_hangup}
 
 
 def _xml(body: str) -> Response:

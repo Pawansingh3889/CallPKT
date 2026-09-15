@@ -1,95 +1,107 @@
 # CallPKT — an AI voicebot, built from scratch, for $0
 
-A phone number you can call that runs a hand-written IVR + conversational AI loop, built
-the same way as [AskPKT](https://github.com/Pawansingh3889/AskPKT) and
+Open the page, hit "Start the call," and talk to it, a real voice conversation with an AI,
+running entirely in the browser: no phone number, no telephony provider, no subscription.
+Built the same way as [AskPKT](https://github.com/Pawansingh3889/AskPKT) and
 [CodeRAG-PKT](https://github.com/Pawansingh3889/CodeRAG-PKT): every piece of the call logic
-is hand-written so each concept (speech-in, dialogue state, speech-out, IVR menu) maps to
-real, readable code — no Vapi, no Bland.ai, no managed "AI phone agent" platform.
+is hand-written so each concept (speech-in, dialogue state, speech-out) maps to real,
+readable code — no Vapi, no Bland.ai, no managed "AI phone agent" platform.
 
 Built after being shortlisted at MyOperator (Front Deployed Engineer), whose product is
 exactly this category: AI Suite (voicebots), Call Management Suite (IVR, routing, recording).
 This is a small, honest demonstration of the same mechanism, built rather than bought.
 
-## Why this design
+## Why browser voice, not a phone number
 
-Twilio's own `<Gather input="speech">` (speech-to-text) and `<Say>` (text-to-speech, Amazon
-Polly voices) are included free inside trial voice minutes — no per-minute AI platform fee
-on top. The only thing Twilio doesn't do for you is decide *what to say back*, which is what
-this repo builds: a small dialogue manager that takes the caller's transcribed speech, asks
-an LLM for a reply, and hands the reply back to Twilio as `<Say>`.
+The original plan used Twilio's free trial (`<Gather input="speech">` for STT, `<Say>` for
+TTS, both included free in trial voice minutes). That's still in the repo and still works in
+principle, but Twilio's trial gates real number purchase behind a paid plan in some regions —
+hit that live on 15 Sep 2026 trying to buy an India-reachable number. Rather than pay for a
+demo, the default path became the browser: Chrome's built-in Web Speech API
+(`SpeechRecognition` for STT, `speechSynthesis` for TTS) is free forever, no account, no
+trial window, no region restrictions. The conversation manager underneath
+(`app/conversation.py`, `app/llm.py`) doesn't know or care which one is calling it, both
+paths feed it the same way.
 
-Total cost to run this demo: **$0**, inside Twilio's free trial (75 voice minutes, 100 SMS,
-5 verified numbers, no credit card) plus a free-tier LLM (Groq's OpenAI-compatible API, free
-tier, or swap in any OpenAI-compatible endpoint via `.env`).
+Total cost to run the default (browser) path: **$0**, forever, just a free-tier LLM key
+(Groq's OpenAI-compatible API, or swap in any OpenAI-compatible endpoint via `.env`).
 
 ## Architecture
 
 ```
-Caller dials Twilio number
+Browser: open http://localhost:8000, click "Start the call"
         │
         ▼
-POST /voice   (Twilio webhook, first ring)
-        │  returns TwiML: greeting + <Gather input="speech dtmf">
-        ▼
-Caller speaks or presses a digit
+GET /              serves web/index.html
         │
         ▼
-POST /gather  (Twilio webhook, per turn)
-        │  digit 1 → canned IVR info (Call Management Suite-style menu)
-        │  digit 2 / speech → conversation.py asks the LLM for a reply
-        │  every turn logged to data/calls/<CallSid>.json
+Web Speech API listens (SpeechRecognition, free, built into Chrome)
+        │
         ▼
-TwiML <Say> reply + another <Gather>, or <Hangup> after goodbye / 6 turns
+POST /chat  {session_id, text}
+        │  conversation.py: append to history, ask the LLM for a reply,
+        │  log the turn to data/calls/<session_id>.json
+        ▼
+{reply, hangup} back to the browser
+        │
+        ▼
+speechSynthesis speaks the reply, then either listens again or ends the call
 ```
 
-No webhook server is required to *test the dialogue logic itself* — see
-`scripts/simulate_call.py`, which drives `conversation.py` directly from the terminal with
-no Twilio account needed at all. Get the conversation right for free before spending any of
-the 75 trial minutes on real calls.
+The Twilio path (optional, see below) is the same `conversation.py` behind a different
+front door: `POST /voice` and `POST /gather` instead of `GET /` and `POST /chat`.
+
+No server is even required to *test the dialogue logic itself* — see
+`scripts/simulate_call.py`, which drives `conversation.py` directly from the terminal.
 
 ## Setup
 
 ```bash
 uv sync
 cp .env.example .env
-# fill in GROQ_API_KEY (free at console.groq.com) once you have one
+# fill in LLM_API_KEY (free at console.groq.com/keys)
 ```
 
-Test the conversation loop with no phone, no Twilio account, no cost:
+Test the conversation loop from the terminal first, fastest way to check the LLM key works:
 
 ```bash
 uv run python scripts/simulate_call.py
 ```
 
-## Going live (once you have a free Twilio trial account)
+Then run the real thing:
 
-1. Sign up at [twilio.com/try-twilio](https://www.twilio.com/try-twilio) — no credit card.
-2. Buy/claim your trial number, verify your own phone number as a recipient (trial accounts
-   can only call verified numbers, that's fine for a personal demo).
-3. Add `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` to `.env`.
-4. Run the server: `uv run uvicorn app.main:app --reload`
-5. Expose it publicly (pick one, both are free):
-   - `ngrok http 8000` (quick, URL changes each restart on the free tier)
-   - Railway free tier (stable URL, matches how Elenchus is already deployed)
-6. In the Twilio console, set the number's "A call comes in" webhook to
-   `https://<your-public-url>/voice`.
-7. Call your Twilio number from your verified phone.
+```bash
+uv run uvicorn app.main:app --reload
+```
+
+Open **http://localhost:8000**, click "Start the call," allow microphone access, talk.
+Web Speech API works on `localhost` without HTTPS, so no tunnel or deployment is needed to
+try it yourself. (Chrome desktop or Android; Safari's support is inconsistent as of 2026.)
 
 ## Milestones
 
-- [x] 1. TwiML generation, hand-written, no Twilio helper-library TwiML builder — `app/twiml.py`
-- [x] 2. IVR menu (press 1 / press 2) — `app/ivr.py`
-- [x] 3. Dialogue manager with per-call session state, keyed by CallSid — `app/conversation.py`
-- [x] 4. LLM call, pluggable provider via `.env` (defaults to Groq's free tier) — `app/llm.py`
-- [x] 5. Per-call transcript logging to local JSON — `app/call_log.py`
-- [x] 6. FastAPI webhook server (`/voice`, `/gather`, `/status`) — `app/main.py`
-- [x] 7. Terminal call simulator, no Twilio/phone needed to test — `scripts/simulate_call.py`
-- [ ] 8. Twilio request-signature validation (`app/security.py` stubbed, needs a live
-      Twilio auth token to test against)
-- [ ] 9. Public deployment (ngrok for testing, or Railway for a stable demo URL) — needs your
-      own Twilio account and a deploy target, not something to do from a repo alone
-- [ ] 10. Optional: log each call summary into the Notion Job Hunt Tracker instead of local
+- [x] 1. Dialogue manager with per-session state (`app/conversation.py`), shared by both
+      call paths
+- [x] 2. LLM call, pluggable provider via `.env` (defaults to Groq's free tier) — `app/llm.py`
+- [x] 3. Per-call transcript logging to local JSON — `app/call_log.py`
+- [x] 4. Browser voice frontend, Web Speech API, no build step — `web/index.html`
+- [x] 5. `/chat` endpoint wiring the browser to the dialogue manager — `app/main.py`
+- [x] 6. Terminal call simulator, no browser/server needed to test — `scripts/simulate_call.py`
+- [x] 7. Hand-written TwiML generation, no Twilio helper-library builder — `app/twiml.py`
+- [x] 8. IVR menu (press 1 / press 2) — `app/ivr.py`
+- [x] 9. Twilio webhook server (`/voice`, `/gather`) — same backend, optional front door
+- [ ] 10. Twilio path going live — blocked on Twilio's trial paywall, not a code problem;
+      revisit if a working number turns up another way
+- [ ] 11. Optional: log each call summary into the Notion Job Hunt Tracker instead of local
       JSON, using the same `NOTION_API_KEY` pattern the WhatsApp workflow already uses
+
+## Going live on Twilio anyway (optional, needs a working number)
+
+1. Buy/claim a Twilio number and verify a recipient number in the console.
+2. Add `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` to `.env`.
+3. Expose the server publicly: `ngrok http 8000`, or Railway for a stable URL.
+4. Set the Twilio number's "A call comes in" webhook to `https://<public-url>/voice`.
+5. Call the Twilio number from the verified phone.
 
 ## What this is not
 

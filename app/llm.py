@@ -25,7 +25,7 @@ class LLMConfigError(RuntimeError):
 def _client_config() -> tuple[str, str, str]:
     api_key = os.environ.get("LLM_API_KEY")
     base_url = os.environ.get("LLM_BASE_URL", "https://api.groq.com/openai/v1")
-    model = os.environ.get("LLM_MODEL", "llama-3.1-8b-instant")
+    model = os.environ.get("LLM_MODEL", "openai/gpt-oss-20b")
     if not api_key:
         raise LLMConfigError(
             "LLM_API_KEY is not set. Get a free key at console.groq.com and put it "

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CallPKT</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 560px; margin: 48px auto; padding: 0 20px;
+    background: #0b0f14; color: #e7edf3;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  p.sub { color: #8b98a5; margin-top: 0; }
+  #callBtn {
+    width: 100%; padding: 18px; font-size: 1.1rem; border-radius: 12px;
+    border: none; cursor: pointer; margin: 20px 0; font-weight: 600;
+  }
+  #callBtn.idle { background: #2563eb; color: white; }
+  #callBtn.live { background: #dc2626; color: white; }
+  #status { color: #8b98a5; font-size: 0.9rem; min-height: 1.2em; }
+  #transcript {
+    margin-top: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .line { padding: 10px 14px; border-radius: 10px; max-width: 85%; line-height: 1.4; }
+  .user { align-self: flex-end; background: #2563eb; color: white; }
+  .bot { align-self: flex-start; background: #1c2530; }
+  #noSupport { display: none; color: #f59e0b; }
+</style>
+</head>
+<body>
+  <h1>☎️ CallPKT</h1>
+  <p class="sub">A phone call, without a phone. Free, browser-only voice, no Twilio, no number.</p>
+  <p id="noSupport">
+    This browser doesn't support the Web Speech API. Try Chrome on desktop or Android.
+  </p>
+  <button id="callBtn" class="idle">Start the call</button>
+  <div id="status"></div>
+  <div id="transcript"></div>
+
+<script>
+const statusEl = document.getElementById('status');
+const transcriptEl = document.getElementById('transcript');
+const callBtn = document.getElementById('callBtn');
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SpeechRecognition) {
+  document.getElementById('noSupport').style.display = 'block';
+  callBtn.disabled = true;
+}
+
+const sessionId = crypto.randomUUID();
+let recognizer = null;
+let callLive = false;
+
+function addLine(role, text) {
+  const div = document.createElement('div');
+  div.className = 'line ' + (role === 'user' ? 'user' : 'bot');
+  div.textContent = text;
+  transcriptEl.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth' });
+}
+
+function speak(text, onDone) {
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.onend = onDone;
+  speechSynthesis.speak(utter);
+}
+
+function listenOnce() {
+  if (!callLive) return;
+  statusEl.textContent = 'Listening…';
+  recognizer = new SpeechRecognition();
+  recognizer.lang = 'en-IN';
+  recognizer.interimResults = false;
+  recognizer.maxAlternatives = 1;
+
+  recognizer.onresult = async (event) => {
+    const text = event.results[0][0].transcript;
+    addLine('user', text);
+    statusEl.textContent = 'Thinking…';
+    await sendTurn(text);
+  };
+
+  recognizer.onerror = (event) => {
+    if (event.error === 'no-speech') { listenOnce(); return; }
+    statusEl.textContent = 'Mic error: ' + event.error;
+  };
+
+  recognizer.onend = () => {
+    // Chrome ends recognition after each utterance; re-arm if still live
+    // and nothing else (speaking, sending) is in progress.
+  };
+
+  recognizer.start();
+}
+
+async function sendTurn(text) {
+  const res = await fetch('/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, text }),
+  });
+  const data = await res.json();
+  addLine('bot', data.reply);
+  statusEl.textContent = 'Speaking…';
+  speak(data.reply, () => {
+    if (data.hangup) {
+      endCall();
+    } else {
+      listenOnce();
+    }
+  });
+}
+
+function startCall() {
+  callLive = true;
+  callBtn.textContent = 'End call';
+  callBtn.className = 'live';
+  transcriptEl.innerHTML = '';
+  statusEl.textContent = 'Connecting…';
+  speak(
+    "Hi, this is CallPKT, a free browser voice demo. Start talking whenever you're ready.",
+    () => listenOnce()
+  );
+}
+
+function endCall() {
+  callLive = false;
+  callBtn.textContent = 'Start the call';
+  callBtn.className = 'idle';
+  statusEl.textContent = 'Call ended.';
+  if (recognizer) recognizer.stop();
+  speechSynthesis.cancel();
+}
+
+callBtn.addEventListener('click', () => {
+  if (callLive) { endCall(); } else { startCall(); }
+});
+</script>
+</body>
+</html>
