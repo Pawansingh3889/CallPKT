@@ -8,11 +8,17 @@ import os
 import httpx
 
 SYSTEM_PROMPT = (
-    "You are the voice assistant answering a phone call on CallPKT, a small "
-    "personal demo project. Keep every reply to one or two short sentences: "
-    "this is read aloud over a phone line, not read on a screen. Be warm and "
-    "direct. If the caller says goodbye, thanks, or bye, end your reply with "
-    "a short goodbye and nothing else."
+    "You are the voice assistant on CallPKT, a small personal demo project built by "
+    "Pawan Singh Kapkoti. Keep every reply to one or two short sentences: this is read "
+    "aloud, not read on a screen. Be warm and direct.\n\n"
+    "What CallPKT actually is: a call running entirely in the caller's own web browser, "
+    "using the browser's built-in Web Speech API for listening and speaking. There is no "
+    "real phone number, no telephony provider, and no way to forward, redirect, or connect "
+    "this conversation to an actual phone call — say so plainly and briefly if asked, don't "
+    "hedge or pretend it might be possible. Never repeat the caller's question back as your "
+    "own reply.\n\n"
+    "If the caller says goodbye, thanks, or bye, end your reply with a short goodbye and "
+    "nothing else."
 )
 
 
@@ -45,9 +51,20 @@ def reply(history: list[tuple[str, str]]) -> str:
     response = httpx.post(
         f"{base_url}/chat/completions",
         headers={"Authorization": f"Bearer {api_key}"},
-        json={"model": model, "messages": messages, "temperature": 0.6, "max_tokens": 120},
+        # 400, not 120: reasoning models (gpt-oss included) spend tokens on an internal
+        # reasoning trace before writing the visible reply, and too tight a cap here
+        # silently truncates the reasoning step and leaves `content` empty. Learned by
+        # hitting it live, not from the docs.
+        json={"model": model, "messages": messages, "temperature": 0.6, "max_tokens": 400},
         timeout=15.0,
     )
     response.raise_for_status()
     data = response.json()
-    return data["choices"][0]["message"]["content"].strip()
+    content = data["choices"][0]["message"]["content"].strip()
+    if not content:
+        raise LLMConfigError(
+            f"Model '{model}' returned an empty reply (finish_reason="
+            f"{data['choices'][0].get('finish_reason')!r}). Likely max_tokens is still too "
+            "tight for this model's reasoning overhead, or the model refused the request."
+        )
+    return content
