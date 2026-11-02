@@ -26,6 +26,14 @@ app/security.py                    → Twilio request-signature validation (stub
                                        until a real TWILIO_AUTH_TOKEN exists to test against)
 ```
 
+## Twilio phone path (optional, needs a working number)
+
+1. Buy/claim a Twilio number and verify a recipient number in the console.
+2. Add `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` to `.env`.
+3. Expose the server publicly: `ngrok http 8000`, or Railway for a stable URL.
+4. Set the Twilio number's "A call comes in" webhook to `https://<public-url>/voice`.
+5. Call the Twilio number from the verified phone.
+
 ## Dev commands
 
 ```bash
