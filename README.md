@@ -103,6 +103,12 @@ try it yourself. (Chrome desktop or Android; Safari's support is inconsistent as
 4. Set the Twilio number's "A call comes in" webhook to `https://<public-url>/voice`.
 5. Call the Twilio number from the verified phone.
 
+## Call center QA reference
+
+[docs/qa-glossary.md](docs/qa-glossary.md) lists the QA vocabulary a BPO voice process uses
+(CSAT, NPS, FCR, AHT, calibration, fatal errors, script deviation, scorecard parameters,
+compliance and speech analytics terms), the reference for simulating call QA on CallPKT calls.
+
 ## What this is not
 
 Not a replacement for MyOperator's actual product (multi-tenant, carrier-grade, years of
