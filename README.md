@@ -109,6 +109,30 @@ try it yourself. (Chrome desktop or Android; Safari's support is inconsistent as
 (CSAT, NPS, FCR, AHT, calibration, fatal errors, script deviation, scorecard parameters,
 compliance and speech analytics terms), the reference for simulating call QA on CallPKT calls.
 
+## Call QA scorer
+
+`scripts/score_call.py` audits a call transcript against a QA scorecard (`app/qa_score.py`):
+
+- **Rule checks** the transcript proves by itself: opening, dead air, further assistance, closing.
+- **LLM checks** for judgement: probing, empathy, accuracy, professionalism, fatal errors. Every
+  verdict must quote the call; a quote that is not in the transcript is not scored and goes to
+  human review. A verified fatal error makes the score 0.
+
+```bash
+uv run python scripts/score_call.py data/calls/*.json             # your CallPKT calls
+uv run python scripts/score_call.py path/to/calls/*.json --no-llm # rule checks only, no API key
+```
+
+Real calls to score without making any: [CallCenterEN](https://huggingface.co/datasets/AIxBlock/92k-real-world-call-center-scripts-english),
+91,706 real English call center transcripts with timed words and personal details redacted
+(CC BY-NC 4.0, non-commercial). Download a zip into `data/external/` (gitignored) and point the
+script at the JSON files. It has no speaker labels, so dead air there counts every pause,
+proper holds included, and needs a human look.
+
+Ideas borrowed, code not: quote-backed verdicts from
+[call-insight-ai](https://github.com/bogdan0089/call-insight-ai); the rubric-plus-flags shape
+from [CallQA](https://github.com/kndkrakhil/CallQA).
+
 ## What this is not
 
 Not a replacement for MyOperator's actual product (multi-tenant, carrier-grade, years of

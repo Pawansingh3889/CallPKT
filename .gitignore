@@ -4,3 +4,4 @@ __pycache__/
 .env
 data/calls/
 .pytest_cache/
+data/external/

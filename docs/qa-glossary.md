@@ -144,6 +144,8 @@ Relevant to a project like CallPKT, where a bot or an AI scorer is involved.
 
 ## 8. What a CallPKT transcript can already measure
 
+Implemented in `app/qa_score.py`; run it with `scripts/score_call.py` (see README).
+
 `app/call_log.py` saves every turn with its role, text and a timestamp, so these can be scored from
 `data/calls/*.json` without new recording:
 

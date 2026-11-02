@@ -44,19 +44,30 @@ def _client_config() -> tuple[str, str, str]:
 def reply(history: list[tuple[str, str]]) -> str:
     """history is a list of (role, text) pairs, role in {'user', 'assistant'}.
     Returns the assistant's next line."""
-    api_key, base_url, model = _client_config()
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend({"role": role, "content": text} for role, text in history)
+    # 400, not 120: reasoning models (gpt-oss included) spend tokens on an internal
+    # reasoning trace before writing the visible reply, and too tight a cap here
+    # silently truncates the reasoning step and leaves `content` empty. Learned by
+    # hitting it live, not from the docs.
+    return complete(messages, temperature=0.6, max_tokens=400, timeout=15.0)
 
+
+def complete(
+    messages: list[dict[str, str]], *, temperature: float, max_tokens: int, timeout: float
+) -> str:
+    """One chat completion against the configured endpoint. Raises on an empty reply."""
+    api_key, base_url, model = _client_config()
     response = httpx.post(
         f"{base_url}/chat/completions",
         headers={"Authorization": f"Bearer {api_key}"},
-        # 400, not 120: reasoning models (gpt-oss included) spend tokens on an internal
-        # reasoning trace before writing the visible reply, and too tight a cap here
-        # silently truncates the reasoning step and leaves `content` empty. Learned by
-        # hitting it live, not from the docs.
-        json={"model": model, "messages": messages, "temperature": 0.6, "max_tokens": 400},
-        timeout=15.0,
+        json={
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        },
+        timeout=timeout,
     )
     response.raise_for_status()
     data = response.json()

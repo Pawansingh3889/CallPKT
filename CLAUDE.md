@@ -18,6 +18,8 @@ app/conversation.py     → the dialogue manager: per-session state, turn limit,
 app/llm.py                → the LLM call; pluggable OpenAI-compatible endpoint,
                               defaults to Groq's free tier
 app/call_log.py              → per-call transcript logged to local JSON
+app/qa_score.py              → QA scorecard: rule checks + quote-verified LLM checks
+scripts/score_call.py        → CLI for the scorer (CallPKT logs and CallCenterEN JSON)
 app/twiml.py                   → hand-written TwiML (Twilio path only)
 app/ivr.py                       → IVR menu logic (Twilio path only)
 app/security.py                    → Twilio request-signature validation (stubbed
