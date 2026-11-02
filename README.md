@@ -111,23 +111,52 @@ compliance and speech analytics terms), the reference for simulating call QA on 
 
 ## Call QA scorer
 
-`scripts/score_call.py` audits a call transcript against a QA scorecard (`app/qa_score.py`):
-
-- **Rule checks** the transcript proves by itself: opening, dead air, further assistance, closing.
-- **LLM checks** for judgement: probing, empathy, accuracy, professionalism, fatal errors. Every
-  verdict must quote the call; a quote that is not in the transcript is not scored and goes to
-  human review. A verified fatal error makes the score 0.
+`scripts/score_call.py` scores a call transcript out of 100 (`app/qa_score.py`).
 
 ```bash
-uv run python scripts/score_call.py data/calls/*.json             # your CallPKT calls
-uv run python scripts/score_call.py path/to/calls/*.json --no-llm # rule checks only, no API key
+uv run python scripts/score_call.py data/calls/*.json              # CallPKT calls
+uv run python scripts/score_call.py path/to/calls/*.json --no-llm  # rules only, no API key
 ```
 
-Real calls to score without making any: [CallCenterEN](https://huggingface.co/datasets/AIxBlock/92k-real-world-call-center-scripts-english),
-91,706 real English call center transcripts with timed words and personal details redacted
-(CC BY-NC 4.0, non-commercial). Download a zip into `data/external/` (gitignored) and point the
-script at the JSON files. It has no speaker labels, so dead air there counts every pause,
-proper holds included, and needs a human look.
+### Rules
+
+| Parameter | Pts | Checked by | Passes when |
+|---|---|---|---|
+| Opening | 10 | rule | First 60 agent words have a greeting and a name or offer to help |
+| Dead air | 10 | rule | No silence of 10s or more before the agent speaks (`--dead-air` to change) |
+| Further assistance | 5 | rule | "Anything else" in the last 80 agent words |
+| Closing | 5 | rule | Thanks and a goodbye in the last 80 agent words |
+| Probing | 15 | LLM | Agent asked questions before acting |
+| Empathy | 15 | LLM | Agent acknowledged the customer's situation |
+| Accuracy | 25 | LLM | Information and resolution correct and complete |
+| Professionalism | 15 | LLM | Courteous, no rudeness or blaming |
+
+### Scoring
+
+- Score = points passed / points checked × 100.
+- **Fatal errors** (rudeness, harmful misinformation, no verification, hanging up, survey begging)
+  make the score 0.
+- Every LLM verdict must quote the call. **A quote not found in the transcript is not scored**;
+  the item goes to `REVIEW` for a human.
+- Every rule result prints its evidence (matched phrase, or the silence time and the words before it).
+
+### Findings (first runs, 2 Nov 2026)
+
+Data: [CallCenterEN](https://huggingface.co/datasets/AIxBlock/92k-real-world-call-center-scripts-english),
+91,706 real English call center transcripts, redacted, CC BY-NC 4.0. Put the zips in
+`data/external/` (gitignored).
+
+- **5 outbound calls, rules only:** average 36.6%. 4 of 5 had silence over 10s, 0 of 5 asked
+  "anything else", 1 of 5 closed with thanks and goodbye.
+- **Dead air needs a human:** one 34s "silence" came right after "Just a moment", a proper hold.
+  CallCenterEN has no speaker labels, so every pause counts.
+- **Opening fails can be the recording:** one call started mid-conversation, so no greeting exists.
+- **Quote check works:** the LLM gave a greeting quote that is not in the call; probing, empathy and
+  professionalism went to review instead of being scored.
+- **It caught a real CallPKT bug:** the bot said "Sure" to "can I redirect this to my number"
+  (it can't). Accuracy failed with that quote.
+
+Small sample: these show the scorer working, not call center benchmarks.
 
 Ideas borrowed, code not: quote-backed verdicts from
 [call-insight-ai](https://github.com/bogdan0089/call-insight-ai); the rubric-plus-flags shape
